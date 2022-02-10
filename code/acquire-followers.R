@@ -19,7 +19,7 @@ mp_list <- bind_rows(
 
 safe_read <- safely(read_csv2) 
 
-mp_list_api <- map(mp_list$api_link, ~safe_read(.x) %>% pluck(1))
+#mp_list_api <- map(mp_list$api_link, ~safe_read(.x) %>% pluck(1))
 
 twitter_data <- mp_list %>% 
   filter(!is.na(twitter)) %>% 
@@ -28,23 +28,50 @@ twitter_data <- mp_list %>%
   left_join(lookup_users(mp_list$twitter) %>% select(user_id, screen_name), by = c("twitter" = "screen_name"))
 
 politicians_tbl <- map(mp_list_api, ~select(.x, name = nom, id, twitter, groupe_sigle)) %>% bind_rows()
-sliced <- politicians_tbl %>% slice(1:10)
-#bearer_token <- ""
 
-# get followers
+names <- read_csv("data/politicians_tbl.csv")
+
+# scrape it
+
+## functions
+add_10 <- function(n) n + 10
 
 get_followers_tbl <- function(twitter_name) {
   tibble(
     user_id = lookup_users(twitter_name) %>% pull(user_id),
-    followers = rtweet::get_followers(user = twitter_name, retryonratelimit = TRUE)
+    followers = get_followers(
+      user = twitter_name, 
+      n = lookup_users(twitter_name) %>% pull(followers_count) %>% add_10(), 
+      retryonratelimit = TRUE) %>% 
+      pull(user_id)
   )
 }
 
-safe_write <- safely(write_csv)
 
-lookup_users("felix_lennert")
 
-sliced %>% 
-  pull(twitter) %>% 
-  walk(~get_followers_tbl(.x) %>% 
-         safe_write(., paste0("data/follower_data/", .x, ".csv")))
+#scrape_call
+already_scraped <- dir_ls("/Volumes/Transcend/final_scrape") %>% 
+  str_remove_all("\\/Volumes\\/Transcend\\/final\\_scrape\\/|\\.csv")
+
+to_scrape <- names$twitter[!names$twitter %in% already_scraped]
+
+to_scrape[[3]] <- "chevenement"
+
+walk(to_scrape[[3]], ~get_followers_tbl(.x) %>% 
+      safe_write(., paste0("/Volumes/Transcend/temp_scrape/", .x, ".csv")))
+
+
+## get friends
+
+follower_list <- read_csv("data/distinct-followers.csv") %>% 
+  mutate(followers = as.character(followers))
+
+follower_list$followers[[2]]
+
+get_friends(c("12", "1000"))
+
+scrape_list_ge10 <- follower_list %>% filter(n > 9) %>% pull(followers) %>% split(., ceiling(seq_along(.)/15))
+
+scrape_list_ge10[[1]] 
+
+
